@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS seen_tweets (
     seen_at   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_seen_handle ON seen_tweets(handle);
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 
@@ -88,6 +92,21 @@ class Store:
             "last_seen_id=excluded.last_seen_id, last_poll_at=excluded.last_poll_at, "
             "initialized=excluded.initialized",
             (handle, last_seen_id, int(time.time()), int(initialized)),
+        )
+        self._db.commit()
+
+    # -- meta kv ------------------------------------------------------------
+    def get_meta(self, key: str) -> str | None:
+        row = self._db.execute(
+            "SELECT value FROM meta WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        self._db.execute(
+            "INSERT INTO meta(key, value) VALUES(?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, value),
         )
         self._db.commit()
 

@@ -39,6 +39,24 @@ queryids:
     UserByScreenName: "2qvSHpkWTMS9i0zJAwDNiA"
     UserTweets: "6r5OLCC_wFH4CpRyXKuAmQ"
 
+# --- Lists mode (scales to hundreds/thousands of accounts on one session) ---
+# Instead of one request per account, xmon puts every handle from accounts.txt
+# into an X List and polls ListLatestTweetsTimeline: ONE request returns the
+# recent tweets of ALL members. Query ids for List ops are auto-captured by the
+# headless-browser harvester (python -m xmon.harvest) on first run.
+lists:
+  enabled: true
+  name: "xmon-monitor"
+  description: "auto-managed by xmon"
+  private: true                 # a private List; monitored accounts aren't notified
+  list_id: ""                   # blank -> xmon creates one and remembers it in the DB
+  prune_extra: false            # true -> remove List members not in accounts.txt
+  poll_interval_seconds: 60     # one poll covers the whole List
+  tweets_per_request: 100        # page size; higher catches bursts in one call
+  web_pages: 1                  # dashboard: timeline pages per refresh (1 = 1 request).
+                                # Rate budget is 50 req / 15 min, so keep this low
+                                # and don't auto-refresh the dashboard too fast.
+
 # --- Sinks ------------------------------------------------------------------
 sinks:
   - type: console

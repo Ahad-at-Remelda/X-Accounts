@@ -49,11 +49,29 @@ class QueryIdConfig:
 
 
 @dataclass
+class ListsConfig:
+    enabled: bool = False
+    name: str = "xmon-monitor"
+    description: str = "auto-managed by xmon"
+    private: bool = True
+    list_id: str = ""          # blank -> auto-create and persist in the DB
+    prune_extra: bool = False  # remove members not in accounts.txt
+    poll_interval_seconds: int = 60
+    tweets_per_request: int = 40
+    web_pages: int = 1         # timeline pages the dashboard fetches per refresh
+                               # (1 = 1 request/refresh; raise for more coverage
+                               # per refresh at proportional rate-budget cost)
+    sync_on_web_start: bool = True  # dashboard adds missing accounts.txt members
+                                    # to the List on startup (background)
+
+
+@dataclass
 class Config:
     auth: AuthConfig
     poll: PollConfig
     rate: RateConfig
     queryids: QueryIdConfig
+    lists: ListsConfig
     sinks: list[dict[str, Any]]
     db_path: str
     log_level: str
@@ -126,6 +144,20 @@ def load_config(base_dir: str = ".") -> Config:
         fallback=dict(q_raw.get("fallback", {})),
     )
 
+    lists_raw = raw.get("lists", {}) or {}
+    lists = ListsConfig(
+        enabled=bool(lists_raw.get("enabled", False)),
+        name=str(lists_raw.get("name", "xmon-monitor")),
+        description=str(lists_raw.get("description", "auto-managed by xmon")),
+        private=bool(lists_raw.get("private", True)),
+        list_id=str(lists_raw.get("list_id", "") or ""),
+        prune_extra=bool(lists_raw.get("prune_extra", False)),
+        poll_interval_seconds=int(lists_raw.get("poll_interval_seconds", 60)),
+        tweets_per_request=int(lists_raw.get("tweets_per_request", 40)),
+        web_pages=int(lists_raw.get("web_pages", 1)),
+        sync_on_web_start=bool(lists_raw.get("sync_on_web_start", True)),
+    )
+
     storage_raw = raw.get("storage", {})
     log_raw = raw.get("log", {})
 
@@ -137,6 +169,7 @@ def load_config(base_dir: str = ".") -> Config:
         poll=poll,
         rate=rate,
         queryids=queryids,
+        lists=lists,
         sinks=list(raw.get("sinks", []) or [{"type": "console"}]),
         db_path=os.path.join(base_dir, str(storage_raw.get("db_path", "xmon.db"))),
         log_level=str(log_raw.get("level", "INFO")).upper(),

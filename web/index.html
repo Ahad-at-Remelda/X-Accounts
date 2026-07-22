@@ -83,7 +83,7 @@
   <span class="count">Monitoring <b id="count">–</b> names</span>
   <div class="controls">
     <label class="auto"><input type="checkbox" id="auto" checked /> Auto</label>
-    <input type="number" id="interval" min="2" max="120" value="5" title="seconds between checks" />
+    <input type="number" id="interval" min="2" max="600" value="5" title="seconds between checks (rate budget: 50 req / 15 min)" />
     <span style="color:var(--muted);font-size:13px">s</span>
     <button id="fetch" onclick="checkNow()">Fetch now</button>
   </div>
@@ -176,9 +176,13 @@ async function poll() {
     }
     const n = render(data);
     const now = new Date().toLocaleTimeString();
-    $("status").textContent = n > 0
+    const modeTag = data.mode === "list" ? "List (1 req)" : "per-account";
+    const base = n > 0
       ? ("🔔 " + n + " new tweet(s) at " + now)
       : ("Up to date · last checked " + now);
+    const syncing = (data.sync_state === "pending" || data.sync_state === "running")
+      ? " · ⏳ adding members…" : "";
+    $("status").textContent = base + " · " + modeTag + syncing;
   } catch (e) {
     $("status").textContent = "Cannot reach local server: " + e.message;
   } finally {
@@ -215,7 +219,9 @@ $("auto").addEventListener("change", () => {
   $("dot").className = "dot" + ($("auto").checked ? " live" : "");
   schedule();
 });
+// React immediately as the user types a new interval, not only on blur/enter.
 $("interval").addEventListener("change", schedule);
+$("interval").addEventListener("input", schedule);
 
 // Initial load + start the loop.
 poll().then(schedule);

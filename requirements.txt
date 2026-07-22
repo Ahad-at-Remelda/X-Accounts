@@ -1,2 +1,7 @@
 httpx[http2]>=0.27
 PyYAML>=6.0
+
+# For Lists mode only: the headless-browser query-id harvester that captures
+# the lazily-loaded List GraphQL operations. Per-account mode does not need it.
+#   pip install playwright  &&  python -m playwright install chromium
+playwright>=1.40

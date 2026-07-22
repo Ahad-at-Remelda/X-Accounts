@@ -1,9 +1,30 @@
 # xmon — single-session X account monitor
 
-Watches a set of X accounts via X's internal GraphQL endpoints
-(`UserByScreenName` + `UserTweets`, the same operations x.com's own web app
-calls) and emits new tweets to pluggable sinks. Built for **< 200 accounts at
-1–2 minute freshness on one session**.
+Watches a set of X accounts via X's internal GraphQL endpoints (the same
+operations x.com's own web app calls) and emits new tweets to pluggable sinks.
+
+Two modes, one session:
+
+- **Per-account** (`python -m xmon`) — polls `UserTweets` once per account.
+  Simple, tightest per-account freshness. Rate limit caps this at **tens** of
+  accounts (see Capacity).
+- **Lists** (`python -m xmon.lists`) — puts every account into one X List and
+  polls `ListLatestTweetsTimeline`: **one request returns all members' recent
+  tweets**. Scales to **hundreds–thousands** of accounts on the same session.
+
+## Capacity (measured, not assumed)
+
+The `UserTweets` / `ListLatestTweetsTimeline` rate limit is **50 requests per
+15 min per session** (read live from the `x-rate-limit-limit` header).
+
+- Per-account: `max_accounts = 50 × interval_seconds ÷ 900`. So ~3 at 1-min,
+  ~16 at 5-min, ~50 at 15-min freshness.
+- Lists: 1 request covers the whole List (up to 5,000 members). A List of
+  thousands usually costs 1–3 requests per poll, so one session monitors
+  thousands at a steady cadence. **This is the free way to scale.**
+
+There is no free push/streaming from X; polling is the only free mechanism, and
+Lists batching is how you make polling cheap.
 
 ## Scope / design line
 
@@ -61,6 +82,59 @@ python -m xmon                # run for real
 `--check` is the fastest way to confirm your cookie works and the query-id
 scrape succeeded. On success it logs the resolved user id and the newest tweet
 id it can see.
+
+## Lists mode (scaling to hundreds/thousands)
+
+Configured under `lists:` in `config.yaml` (`enabled: true` by default). xmon
+creates one private X List, adds every `accounts.txt` handle to it, and polls
+the List timeline as a unit.
+
+```
+pip install playwright && python -m playwright install chromium   # one-time
+python -m xmon.harvest         # capture List query ids via headless browser
+python -m xmon.lists --setup-only   # create list + add all members, then exit
+python -m xmon.lists                 # run the monitor for real
+python -m xmon.lists --dry-run       # poll but don't deliver
+```
+
+- **Query ids for List ops** live in x.com chunks that only load when you open
+  the Lists UI, so static scraping can't reach them. `python -m xmon.harvest`
+  drives a headless Chromium (logged in with your cookie), visits the Lists
+  pages, and reads every operation's query id straight out of the JS the browser
+  loads — fully automatic and self-healing. `xmon.lists` runs it on its own if
+  any List op is missing from the cache.
+- **List creation is programmatic** (`CreateList`). The created List id is
+  remembered in the DB (`meta` table), so restarts reuse it. To use an existing
+  List instead, set `lists.list_id` in config.
+- **Member sync**: every run adds any `accounts.txt` handle not yet in the List.
+  Set `lists.prune_extra: true` to also remove members no longer in the file.
+- The monitored accounts are **not notified** — the List is private, and
+  membership of a private List is not visible to the people in it.
+
+## Dashboard (web UI)
+
+```
+python -m xmon.web          # then open http://127.0.0.1:8787
+```
+
+A one-page dashboard: a card per monitored account showing its **latest tweet**,
+auto-refreshing, with a green "⚡ detected Ns after posting" latency badge when a
+new post is caught live. When `lists.enabled` is true it reads from the List —
+**one request covers every account per refresh** (`lists.web_pages`, default 1).
+Accounts not in the most recent page keep their last-known tweet.
+
+**Adding accounts is one step:** edit `accounts.txt`, then run
+`python -m xmon.web`. On startup the dashboard auto-adds any new handles to the
+List in the background (harvesting List query-ids first if needed), so you never
+run a separate sync command. The page starts serving immediately and shows
+"⏳ adding members…" while it works; new members appear once added and once they
+post. Disable this with `lists.sync_on_web_start: false` (then use
+`python -m xmon.lists --setup-only` to sync manually).
+
+Mind the **50 req / 15 min** budget: the dashboard's auto-refresh spends it.
+The default 20s interval ≈ 45 req/15 min. Lower it only for short latency-test
+bursts, and don't run the dashboard and `xmon.lists` monitor against the same
+session non-stop — they share the budget.
 
 ## How the fragile parts stay alive
 
