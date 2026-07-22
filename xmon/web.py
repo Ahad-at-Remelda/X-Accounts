@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
@@ -27,6 +28,7 @@ from .parse import parse_timeline
 from .queryids import QueryIdResolver
 from .sessions import Session, SessionBlocked
 from .store import Store, UserRecord
+from .watch import _created_epoch
 
 log = logging.getLogger("xmon.web")
 
@@ -41,6 +43,13 @@ class Backend:
         self._ready = threading.Event()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._setup_error: str | None = None
+        # When this process started watching. A tweet counts as a genuine
+        # latency measurement only if it was posted after this instant;
+        # tweets already present at startup are "pre-existing", not detections.
+        self._start = time.time()
+        # handle -> {"id": int, "first_seen": float} : the moment we first saw
+        # each account's newest tweet id, so detection lag is stable across polls.
+        self._seen: dict[str, dict] = {}
 
     # -- lifecycle ----------------------------------------------------------
     def start(self) -> None:
@@ -111,6 +120,22 @@ class Backend:
             )
             if tweets:
                 t = tweets[-1]  # chronological: newest is last
+                cid = int(t.id)
+                created = _created_epoch(t.created_at)
+
+                # Record first-sighting time for this tweet id so the measured
+                # lag stays fixed once detected (doesn't grow on later polls).
+                prev = self._seen.get(handle)
+                if prev is None or cid > prev["id"]:
+                    self._seen[handle] = {"id": cid, "first_seen": time.time()}
+                first_seen = self._seen[handle]["first_seen"]
+
+                # Genuine detection latency only for tweets posted after we
+                # started watching; otherwise it's a pre-existing tweet.
+                measured = created is not None and created >= self._start
+                detected_lag = round(first_seen - created, 1) if measured else None
+                age = round(time.time() - created, 1) if created is not None else None
+
                 item["tweet"] = {
                     "id": t.id,
                     "text": t.text,
@@ -119,6 +144,9 @@ class Backend:
                     "is_retweet": t.is_retweet,
                     "is_reply": t.is_reply,
                     "is_quote": t.is_quote,
+                    "measured": measured,
+                    "detected_lag_seconds": detected_lag,
+                    "age_seconds": age,
                 }
         except SessionBlocked as exc:
             item["error"] = f"session blocked by X: {exc}"

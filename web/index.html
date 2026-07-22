@@ -7,7 +7,8 @@
 <style>
   :root {
     --bg: #15202b; --card: #1c2732; --line: #38444d;
-    --text: #f7f9f9; --muted: #8b98a5; --accent: #1d9bf0; --err: #f4212e;
+    --text: #f7f9f9; --muted: #8b98a5; --accent: #1d9bf0;
+    --err: #f4212e; --ok: #00ba7c;
   }
   * { box-sizing: border-box; }
   body {
@@ -15,9 +16,9 @@
     background: var(--bg); color: var(--text); line-height: 1.4;
   }
   header {
-    position: sticky; top: 0; background: var(--bg);
-    border-bottom: 1px solid var(--line); padding: 16px 20px;
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+    border-bottom: 1px solid var(--line); padding: 14px 20px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   }
   h1 { font-size: 18px; margin: 0; font-weight: 700; }
   .count {
@@ -25,25 +26,46 @@
     border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--muted);
   }
   .count b { color: var(--text); }
+  .controls { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  label.auto { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); cursor: pointer; }
+  input[type="number"] {
+    width: 58px; background: var(--card); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px;
+  }
   button {
-    margin-left: auto; background: var(--accent); color: #fff; border: 0;
-    border-radius: 999px; padding: 10px 22px; font-size: 15px; font-weight: 700;
-    cursor: pointer;
+    background: var(--accent); color: #fff; border: 0; border-radius: 999px;
+    padding: 9px 18px; font-size: 14px; font-weight: 700; cursor: pointer;
   }
   button:disabled { opacity: .5; cursor: default; }
-  .meta { font-size: 13px; color: var(--muted); width: 100%; }
+  .meta { font-size: 13px; color: var(--muted); width: 100%; display: flex; gap: 14px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); vertical-align: 1px; margin-right: 5px; }
+  .dot.live { background: var(--ok); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
   main { max-width: 680px; margin: 0 auto; padding: 8px 12px 40px; }
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
-    padding: 16px; margin: 12px 0;
+    padding: 16px; margin: 12px 0; transition: border-color .3s;
+  }
+  .card.flash { animation: flash 3s ease-out; }
+  @keyframes flash {
+    0% { border-color: var(--ok); box-shadow: 0 0 0 2px rgba(0,186,124,.5); background: #14342a; }
+    100% { border-color: var(--line); box-shadow: none; background: var(--card); }
   }
   .who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .name { font-weight: 700; }
   .handle { color: var(--muted); font-size: 14px; }
   .tag {
     font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
-    padding: 1px 6px;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 1px 6px;
+  }
+  .badge-new {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: #fff; background: var(--ok); border-radius: 6px; padding: 2px 7px;
+  }
+  .lag {
+    display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700;
+    color: var(--ok); background: rgba(0,186,124,.12); border: 1px solid var(--ok);
+    border-radius: 8px; padding: 3px 9px;
   }
   .text { margin: 10px 0 8px; white-space: pre-wrap; word-wrap: break-word; }
   .foot { display: flex; justify-content: space-between; align-items: center; }
@@ -53,84 +75,150 @@
   .empty { color: var(--muted); font-style: italic; }
   .banner { background: #3a1416; border: 1px solid var(--err); color: #ffd7d9;
             border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
-  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff;
-          border-top-color: transparent; border-radius: 50%; animation: r .7s linear infinite;
-          vertical-align: -2px; margin-right: 6px; }
-  @keyframes r { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <header>
   <h1>xmon</h1>
   <span class="count">Monitoring <b id="count">–</b> names</span>
-  <button id="fetch" onclick="load()">Fetch latest</button>
-  <div class="meta" id="meta">Click “Fetch latest” to load the newest tweet for each account.</div>
+  <div class="controls">
+    <label class="auto"><input type="checkbox" id="auto" checked /> Auto</label>
+    <input type="number" id="interval" min="2" max="120" value="5" title="seconds between checks" />
+    <span style="color:var(--muted);font-size:13px">s</span>
+    <button id="fetch" onclick="checkNow()">Fetch now</button>
+  </div>
+  <div class="meta">
+    <span><span class="dot" id="dot"></span><span id="status">Idle.</span></span>
+    <span id="next"></span>
+  </div>
 </header>
 <main id="list"></main>
 
 <script>
 const $ = (id) => document.getElementById(id);
+let prevIds = {};       // handle -> last tweet id the UI knew about
+let timer = null;       // pending setTimeout
+let inFlight = false;
 
 function esc(s) {
   const d = document.createElement("div");
   d.textContent = s == null ? "" : String(s);
   return d.innerHTML;
 }
-
 function tagFor(t) {
   if (t.is_retweet) return '<span class="tag">retweet</span>';
   if (t.is_reply)   return '<span class="tag">reply</span>';
   if (t.is_quote)   return '<span class="tag">quote</span>';
   return "";
 }
+function humanAge(s) {
+  if (s == null) return "";
+  if (s < 90) return Math.round(s) + "s ago";
+  if (s < 5400) return Math.round(s / 60) + "m ago";
+  return (s / 3600).toFixed(1) + "h ago";
+}
 
-function card(acc) {
+function card(acc, isNew) {
+  const t = acc.tweet;
   const head =
     '<div class="who"><span class="name">' + esc(acc.name) + '</span>' +
     '<span class="handle">@' + esc(acc.handle) + '</span>' +
-    (acc.tweet ? tagFor(acc.tweet) : "") + '</div>';
+    (t ? tagFor(t) : "") +
+    (isNew ? '<span class="badge-new">new</span>' : "") + '</div>';
 
-  if (acc.error) {
-    return '<div class="card">' + head + '<div class="err">' + esc(acc.error) + '</div></div>';
+  if (acc.error)  return '<div class="card">' + head + '<div class="err">' + esc(acc.error) + '</div></div>';
+  if (!t)         return '<div class="card">' + head + '<div class="empty">No tweets found.</div></div>';
+
+  // Latency line: measured detection lag for posts seen live, else age.
+  let lag = "";
+  if (t.detected_lag_seconds != null) {
+    lag = '<div class="lag">⚡ detected ' + t.detected_lag_seconds + 's after posting</div>';
+  } else {
+    lag = '<div class="date" style="margin-top:8px">posted ' + humanAge(t.age_seconds) + '</div>';
   }
-  if (!acc.tweet) {
-    return '<div class="card">' + head + '<div class="empty">No tweets found.</div></div>';
-  }
-  const t = acc.tweet;
-  return '<div class="card">' + head +
+
+  const cls = "card" + (isNew ? " flash" : "");
+  return '<div class="' + cls + '">' + head + lag +
     '<div class="text">' + esc(t.text) + '</div>' +
     '<div class="foot"><span class="date">' + esc(t.created_at) + '</span>' +
     '<a href="' + esc(t.url) + '" target="_blank" rel="noopener">Open on X ↗</a></div>' +
     '</div>';
 }
 
-async function load() {
-  const btn = $("fetch");
-  btn.disabled = true;
-  $("meta").innerHTML = '<span class="spin"></span> Fetching from X…';
+function render(data) {
+  $("count").textContent = data.count;
+  let newCount = 0;
+  const html = data.accounts.map((acc) => {
+    const id = acc.tweet ? acc.tweet.id : null;
+    const known = prevIds[acc.handle];
+    // "new" = the id changed from what the UI last showed (and we had a prior value).
+    const isNew = id && known !== undefined && known !== id;
+    if (isNew) newCount++;
+    if (id) prevIds[acc.handle] = id;
+    return card(acc, isNew);
+  }).join("");
+  $("list").innerHTML = html;
+  return newCount;
+}
+
+async function poll() {
+  if (inFlight) return;
+  inFlight = true;
+  $("dot").className = "dot live";
+  $("status").textContent = "Checking X…";
   try {
     const res = await fetch("/api/latest");
     const data = await res.json();
     if (data.error) {
       $("list").innerHTML = '<div class="banner">' + esc(data.error) + '</div>';
-      $("meta").textContent = "Error.";
-      $("count").textContent = data.count ?? "–";
+      $("status").textContent = "Error.";
       return;
     }
-    $("count").textContent = data.count;
-    $("list").innerHTML = data.accounts.map(card).join("");
-    $("meta").textContent = "Updated " + new Date().toLocaleTimeString() +
-      " · " + data.count + " account(s).";
+    const n = render(data);
+    const now = new Date().toLocaleTimeString();
+    $("status").textContent = n > 0
+      ? ("🔔 " + n + " new tweet(s) at " + now)
+      : ("Up to date · last checked " + now);
   } catch (e) {
-    $("list").innerHTML = '<div class="banner">Could not reach the local server: ' + esc(e.message) + '</div>';
-    $("meta").textContent = "Connection error.";
+    $("status").textContent = "Cannot reach local server: " + e.message;
   } finally {
-    btn.disabled = false;
+    inFlight = false;
+    $("dot").className = "dot" + ($("auto").checked ? " live" : "");
   }
 }
 
-// Auto-load once on open.
-load();
+function schedule() {
+  clearTimeout(timer);
+  if (!$("auto").checked) { $("next").textContent = ""; return; }
+  let sec = Math.max(2, parseInt($("interval").value, 10) || 5);
+  const tick = () => {
+    if (!$("auto").checked) { $("next").textContent = ""; return; }
+    if (sec <= 0) {
+      poll().then(() => { sec = Math.max(2, parseInt($("interval").value, 10) || 5); });
+      sec = Math.max(2, parseInt($("interval").value, 10) || 5);
+    }
+    $("next").textContent = "next check in " + sec + "s";
+    sec--;
+    timer = setTimeout(tick, 1000);
+  };
+  tick();
+}
+
+async function checkNow() {
+  $("fetch").disabled = true;
+  await poll();
+  $("fetch").disabled = false;
+  schedule(); // reset the countdown after a manual check
+}
+
+$("auto").addEventListener("change", () => {
+  $("dot").className = "dot" + ($("auto").checked ? " live" : "");
+  schedule();
+});
+$("interval").addEventListener("change", schedule);
+
+// Initial load + start the loop.
+poll().then(schedule);
 </script>
 </body>
 </html>
