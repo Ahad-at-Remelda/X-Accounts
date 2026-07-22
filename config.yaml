@@ -1,0 +1,56 @@
+# xmon configuration
+# ---------------------------------------------------------------------------
+# Single-session X internal-GraphQL monitor. One cookie, one rate-limit bucket.
+# No account rotation. If X blocks the session, it stays blocked (by design).
+
+# --- Auth: your own logged-in session --------------------------------------
+# Pull these from a browser logged in to x.com (DevTools > Application > Cookies):
+#   auth_token  -> session cookie
+#   ct0         -> CSRF token (sent as both cookie ct0 and header x-csrf-token)
+# The bearer below is the public web-app bearer, identical for every visitor.
+auth:
+  auth_token: "52d476244830dfbe435b07f9fe6b30ee02e8d788"
+  ct0: "6f0173e372c2abe01b6ed7c1a957d316a021e533d3acbff2d5d627713cd13b8a21378a1bcca2e9c081c93e74002dbbda5bfd82e7683e64a426a9b3f4ae9533ce29ac7ec7e65fc592f76bb59c388e890e"
+  # Public web bearer (not a secret; x.com ships it in its JS to everyone).
+  bearer: "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA"
+
+# --- Polling ----------------------------------------------------------------
+poll:
+  interval_seconds: 90          # base cadence per account (1-2 min target)
+  jitter_seconds: 20            # random +/- spread so requests don't align
+  tweets_per_request: 20        # count param to UserTweets
+  include_replies: false        # skip self-replies / reply tweets
+  include_retweets: false       # skip retweets
+  backfill_on_first_seen: false # true = emit existing tweets on first poll of a new account
+
+# --- Rate governor (single session) ----------------------------------------
+# UserTweets is ~500 requests / 15 min / session. We stay well under and also
+# obey the x-rate-limit-* headers the server returns.
+rate:
+  max_requests_per_15min: 450   # soft cap; header-reported limit still wins
+  min_gap_ms: 800               # minimum spacing between any two requests
+
+# --- Query-ID resolver ------------------------------------------------------
+queryids:
+  cache_ttl_hours: 12           # re-scrape x.com JS after this long
+  # Fallback IDs used only if scraping fails on first boot. These rot over time;
+  # the scraper is the real source of truth.
+  fallback:
+    UserByScreenName: "2qvSHpkWTMS9i0zJAwDNiA"
+    UserTweets: "6r5OLCC_wFH4CpRyXKuAmQ"
+
+# --- Sinks ------------------------------------------------------------------
+sinks:
+  - type: console
+  # - type: file
+  #   path: tweets.ndjson
+  # - type: webhook
+  #   url: https://example.com/hook
+  #   timeout_seconds: 10
+
+# --- Storage / logging ------------------------------------------------------
+storage:
+  db_path: xmon.db
+log:
+  level: INFO                   # DEBUG for wire-level detail
+  json: false                   # true = structured JSON log lines

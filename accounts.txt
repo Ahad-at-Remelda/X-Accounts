@@ -1,0 +1,6 @@
+# One X handle per line. '@' optional. Blank lines and '#' comments ignored.
+# Example:
+# nasa
+# XDevelopers
+elonmusk
+nasa

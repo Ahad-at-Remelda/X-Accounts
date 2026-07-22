@@ -1,0 +1,21 @@
+[Unit]
+Description=xmon - single-session X account monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust User and paths to your deployment.
+User=abdulahad
+WorkingDirectory=/home/abdulahad/Workspace/monitoring
+ExecStart=/usr/bin/python3 -m xmon --config-dir /home/abdulahad/Workspace/monitoring
+Restart=on-failure
+RestartSec=30
+# If the session is blocked by X, xmon exits 0 (clean) and is NOT restarted
+# into a hot loop; on-failure only restarts genuine crashes.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=xmon
+
+[Install]
+WantedBy=multi-user.target
