@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>xmon — latest tweets</title>
+<style>
+  :root {
+    --bg: #15202b; --card: #1c2732; --line: #38444d;
+    --text: #f7f9f9; --muted: #8b98a5; --accent: #1d9bf0; --err: #f4212e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.4;
+  }
+  header {
+    position: sticky; top: 0; background: var(--bg);
+    border-bottom: 1px solid var(--line); padding: 16px 20px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  .count {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 12px; font-size: 14px; color: var(--muted);
+  }
+  .count b { color: var(--text); }
+  button {
+    margin-left: auto; background: var(--accent); color: #fff; border: 0;
+    border-radius: 999px; padding: 10px 22px; font-size: 15px; font-weight: 700;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .meta { font-size: 13px; color: var(--muted); width: 100%; }
+  main { max-width: 680px; margin: 0 auto; padding: 8px 12px 40px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; margin: 12px 0;
+  }
+  .who { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .name { font-weight: 700; }
+  .handle { color: var(--muted); font-size: 14px; }
+  .tag {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+    padding: 1px 6px;
+  }
+  .text { margin: 10px 0 8px; white-space: pre-wrap; word-wrap: break-word; }
+  .foot { display: flex; justify-content: space-between; align-items: center; }
+  .foot a { color: var(--accent); text-decoration: none; font-size: 14px; }
+  .date { color: var(--muted); font-size: 13px; }
+  .err { color: var(--err); font-size: 14px; margin-top: 8px; }
+  .empty { color: var(--muted); font-style: italic; }
+  .banner { background: #3a1416; border: 1px solid var(--err); color: #ffd7d9;
+            border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff;
+          border-top-color: transparent; border-radius: 50%; animation: r .7s linear infinite;
+          vertical-align: -2px; margin-right: 6px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>xmon</h1>
+  <span class="count">Monitoring <b id="count">–</b> names</span>
+  <button id="fetch" onclick="load()">Fetch latest</button>
+  <div class="meta" id="meta">Click “Fetch latest” to load the newest tweet for each account.</div>
+</header>
+<main id="list"></main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+
+function tagFor(t) {
+  if (t.is_retweet) return '<span class="tag">retweet</span>';
+  if (t.is_reply)   return '<span class="tag">reply</span>';
+  if (t.is_quote)   return '<span class="tag">quote</span>';
+  return "";
+}
+
+function card(acc) {
+  const head =
+    '<div class="who"><span class="name">' + esc(acc.name) + '</span>' +
+    '<span class="handle">@' + esc(acc.handle) + '</span>' +
+    (acc.tweet ? tagFor(acc.tweet) : "") + '</div>';
+
+  if (acc.error) {
+    return '<div class="card">' + head + '<div class="err">' + esc(acc.error) + '</div></div>';
+  }
+  if (!acc.tweet) {
+    return '<div class="card">' + head + '<div class="empty">No tweets found.</div></div>';
+  }
+  const t = acc.tweet;
+  return '<div class="card">' + head +
+    '<div class="text">' + esc(t.text) + '</div>' +
+    '<div class="foot"><span class="date">' + esc(t.created_at) + '</span>' +
+    '<a href="' + esc(t.url) + '" target="_blank" rel="noopener">Open on X ↗</a></div>' +
+    '</div>';
+}
+
+async function load() {
+  const btn = $("fetch");
+  btn.disabled = true;
+  $("meta").innerHTML = '<span class="spin"></span> Fetching from X…';
+  try {
+    const res = await fetch("/api/latest");
+    const data = await res.json();
+    if (data.error) {
+      $("list").innerHTML = '<div class="banner">' + esc(data.error) + '</div>';
+      $("meta").textContent = "Error.";
+      $("count").textContent = data.count ?? "–";
+      return;
+    }
+    $("count").textContent = data.count;
+    $("list").innerHTML = data.accounts.map(card).join("");
+    $("meta").textContent = "Updated " + new Date().toLocaleTimeString() +
+      " · " + data.count + " account(s).";
+  } catch (e) {
+    $("list").innerHTML = '<div class="banner">Could not reach the local server: ' + esc(e.message) + '</div>';
+    $("meta").textContent = "Connection error.";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Auto-load once on open.
+load();
+</script>
+</body>
+</html>
