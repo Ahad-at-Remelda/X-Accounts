@@ -136,3 +136,90 @@ class XApi:
                 "withV2Timeline": True,
             },
         )
+
+    # -- GraphQL mutations (POST) -------------------------------------------
+    async def _graphql_post(
+        self, operation: str, variables: dict[str, Any], _retried: bool = False
+    ) -> dict[str, Any]:
+        qid = self._resolver.get(operation)
+        if not qid:
+            await self._resolver.refresh()
+            qid = self._resolver.get(operation)
+        if not qid:
+            raise ApiError(f"no query id available for {operation}")
+
+        # Mutations take a JSON body and, verified live, do NOT want a features
+        # blob (sending one is harmless but we omit it for a clean request).
+        body = {"variables": variables, "queryId": qid}
+        url = f"{_GQL}/{qid}/{operation}"
+
+        await self._session.acquire()
+        resp = await self._client.post(
+            url, json=body, headers=self._session.base_headers()
+        )
+        self._session.note_headers(resp.headers)
+
+        if resp.status_code == 200:
+            return self._unwrap(resp.json(), operation)
+        if resp.status_code == 429:
+            await self._session.backoff_429()
+            return await self._graphql_post(operation, variables, _retried)
+        if resp.status_code in (401, 403):
+            body_txt = resp.text[:500]
+            if "Could not authenticate" in body_txt or resp.status_code == 401:
+                raise SessionBlocked(f"{operation}: {resp.status_code} {body_txt}")
+            raise UserUnavailable(f"{operation}: {resp.status_code} {body_txt}")
+        if resp.status_code == 404 and not _retried:
+            await self._resolver.refresh()
+            return await self._graphql_post(operation, variables, _retried=True)
+        raise ApiError(f"{operation}: HTTP {resp.status_code}: {resp.text[:300]}")
+
+    # -- List operations ----------------------------------------------------
+    async def create_list(
+        self, name: str, description: str = "", private: bool = True
+    ) -> str:
+        data = await self._graphql_post(
+            "CreateList",
+            {"isPrivate": private, "name": name, "description": description},
+        )
+        lst = (data or {}).get("list") or {}
+        list_id = lst.get("id_str") or lst.get("rest_id")
+        if not list_id:
+            raise ApiError(f"CreateList returned no id: {json.dumps(data)[:300]}")
+        return str(list_id)
+
+    async def add_list_member(self, list_id: str, user_id: str) -> None:
+        # Note: X returns a cosmetic 'DecodeException' error alongside a valid
+        # data.list on success; _unwrap ignores errors when data is present.
+        await self._graphql_post(
+            "ListAddMember", {"listId": str(list_id), "userId": str(user_id)}
+        )
+
+    async def remove_list_member(self, list_id: str, user_id: str) -> None:
+        await self._graphql_post(
+            "ListRemoveMember", {"listId": str(list_id), "userId": str(user_id)}
+        )
+
+    async def list_meta(self, list_id: str) -> dict[str, Any]:
+        data = await self._graphql_get("ListByRestId", {"listId": str(list_id)})
+        return (data or {}).get("list") or {}
+
+    async def list_members_page(
+        self, list_id: str, count: int = 100, cursor: str | None = None
+    ) -> dict[str, Any]:
+        variables: dict[str, Any] = {
+            "listId": str(list_id),
+            "count": count,
+            "withSafetyModeUserFields": True,
+        }
+        if cursor:
+            variables["cursor"] = cursor
+        return await self._graphql_get("ListMembers", variables)
+
+    async def list_tweets(
+        self, list_id: str, count: int = 20, cursor: str | None = None
+    ) -> dict[str, Any]:
+        variables: dict[str, Any] = {"listId": str(list_id), "count": count}
+        if cursor:
+            variables["cursor"] = cursor
+        return await self._graphql_get("ListLatestTweetsTimeline", variables)

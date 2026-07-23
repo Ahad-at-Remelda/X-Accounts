@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import xmon.web; print\\('import ok'\\)\")",
+      "Bash(python3 -m xmon.web --port 8788 --host 127.0.0.1)",
+      "Bash(curl -s http://127.0.0.1:8788/api/latest)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); a=[x for x in d['accounts'] if x['handle']=='hamzal9v'][0]; print\\(' hamzal9v age_s=',a['tweet']['age_seconds'],'lag=',a['tweet']['detected_lag_seconds']\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m playwright install chromium)",
+      "Bash(timeout 150 python3 scratch_harvest_test.py)",
+      "Bash(python3 -m py_compile xmon/harvest.py)",
+      "Bash(timeout 120 python3 -m xmon.harvest --config-dir .)",
+      "Bash(timeout 90 python3 scratch_list_probe.py)",
+      "Bash(timeout 60 python3 scratch_list_probe2.py)",
+      "Bash(python3 -m py_compile xmon/api.py xmon/parse.py xmon/harvest.py)",
+      "Bash(python3 -c \"import json; json.load\\(open\\('features.json'\\)\\); print\\('features.json valid'\\)\")",
+      "Bash(python3 -c \"from xmon.config import load_config; c=load_config\\('.'\\); print\\('lists.enabled=',c.lists.enabled,'| interval=',c.lists.poll_interval_seconds\\)\")",
+      "Bash(timeout 90 python3 -m xmon.lists --setup-only)",
+      "Bash(timeout 20 python3 -m xmon.lists --no-sync)",
+      "Bash(timeout 60 python3 -c ' *)",
+      "Bash(timeout 25 python3 -m xmon.lists --no-sync)",
+      "Bash(timeout 40 python3 -c ' *)",
+      "Bash(python3 -c \"import json;json.load\\(open\\('features.json'\\)\\)\")",
+      "Bash(python3 -m py_compile xmon/web.py xmon/config.py)",
+      "Bash(python3 -m xmon.web --port 8790 --host 127.0.0.1)",
+      "Bash(curl -sf http://127.0.0.1:8790/ -o /dev/null)",
+      "Bash(curl -s http://127.0.0.1:8790/api/latest)",
+      "Bash(python3 -m xmon.web --port 8791 --host 127.0.0.1)",
+      "Bash(curl -sf http://127.0.0.1:8791/ -o /dev/null)",
+      "Bash(curl -s http://127.0.0.1:8791/api/latest)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('mode:',d['mode'],'| count:',d['count']\\); [print\\(' ',a['handle'],'->',\\(a['tweet']['id'] if a['tweet'] else None\\),\\(a['tweet']['text'][:35] if a['tweet'] else '\\(no recent\\)'\\)\\) for a in d['accounts']]\")",
+      "Bash(python3 -m xmon.web --port 8792 --host 127.0.0.1)",
+      "Bash(curl -s http://127.0.0.1:8792/api/latest)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('mode:',d['mode'],'| sync:',d.get\\('sync_state'\\),'| accounts:',d['count']\\); [print\\(' ',a['handle'],'->',\\(a['tweet']['text'][:30] if a['tweet'] else '\\(no recent tweets yet\\)'\\)\\) for a in d['accounts']]\")"
+    ]
+  }
+}
